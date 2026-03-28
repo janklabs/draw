@@ -1,0 +1,220 @@
+"use client"
+
+import { useCallback, useEffect, useRef, useState } from "react"
+import { saveDrawing } from "@/lib/actions"
+import { CollabPortal, type RoomUser } from "@/lib/collaboration"
+import {
+  generateEncryptionKey,
+  exportKey,
+  importKey,
+  getKeyFromHash,
+  setKeyInHash,
+} from "@/lib/crypto"
+import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types"
+
+interface ExcalidrawWrapperProps {
+  drawingId: string
+  initialData: {
+    elements: readonly any[]
+    appState: Record<string, any>
+    files: Record<string, any>
+  }
+  userId: string
+  userName: string
+}
+
+export function ExcalidrawWrapper({
+  drawingId,
+  initialData,
+  userId,
+  userName,
+}: ExcalidrawWrapperProps) {
+  const [Excalidraw, setExcalidraw] = useState<any>(null)
+  const [isCollaborating, setIsCollaborating] = useState(false)
+  const [collaborators, setCollaborators] = useState<RoomUser[]>([])
+  const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const sceneVersionRef = useRef(0)
+  const portalRef = useRef<CollabPortal | null>(null)
+  const lastBroadcastVersionRef = useRef<Map<string, number>>(new Map())
+
+  // Dynamically import Excalidraw (it only works in browser)
+  useEffect(() => {
+    import("@excalidraw/excalidraw").then((mod) => {
+      setExcalidraw(() => mod.Excalidraw)
+    })
+  }, [])
+
+  // Initialize collaboration
+  useEffect(() => {
+    let cancelled = false
+
+    async function initCollaboration() {
+      // Get or generate encryption key
+      let keyString = getKeyFromHash()
+      let key: CryptoKey
+
+      if (keyString) {
+        key = await importKey(keyString)
+      } else {
+        key = await generateEncryptionKey()
+        keyString = await exportKey(key)
+        setKeyInHash(keyString)
+      }
+
+      if (cancelled) return
+
+      const portal = new CollabPortal(drawingId, key, {
+        onSceneInit: (elements) => {
+          if (excalidrawAPIRef.current) {
+            excalidrawAPIRef.current.updateScene({
+              elements,
+            })
+          }
+        },
+        onSceneUpdate: (elements) => {
+          if (excalidrawAPIRef.current) {
+            // Apply remote updates without polluting undo stack
+            excalidrawAPIRef.current.updateScene({
+              elements,
+            })
+          }
+        },
+        onMouseLocation: (data) => {
+          if (excalidrawAPIRef.current) {
+            const collaboratorsMap = new Map(
+              excalidrawAPIRef.current.getAppState()?.collaborators || [],
+            )
+            collaboratorsMap.set(data.socketId, {
+              username: data.username,
+              pointer: data.pointer,
+              button: data.button,
+              selectedElementIds: data.selectedElementIds,
+            })
+            excalidrawAPIRef.current.updateScene({
+              collaborators: collaboratorsMap,
+            })
+          }
+        },
+        onIdleStatus: (_data) => {
+          // Could update presence indicators
+        },
+        onRoomUserChange: (users) => {
+          setCollaborators(users)
+        },
+      })
+
+      portalRef.current = portal
+      await portal.connect(userId, userName)
+      setIsCollaborating(true)
+    }
+
+    initCollaboration()
+
+    return () => {
+      cancelled = true
+      portalRef.current?.disconnect()
+    }
+  }, [drawingId, userId, userName])
+
+  const handleChange = useCallback(
+    (elements: readonly any[], appState: any, files: any) => {
+      // Send incremental updates to collaborators
+      if (portalRef.current) {
+        // Only send elements that have changed since last broadcast
+        const changedElements = elements.filter((el: any) => {
+          const lastVersion = lastBroadcastVersionRef.current.get(el.id)
+          return lastVersion === undefined || el.version > lastVersion
+        })
+
+        if (changedElements.length > 0) {
+          portalRef.current.sendSceneUpdate(changedElements)
+          changedElements.forEach((el: any) => {
+            lastBroadcastVersionRef.current.set(el.id, el.version)
+          })
+        }
+      }
+
+      // Debounced auto-save: save 2 seconds after last change
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+
+      saveTimeoutRef.current = setTimeout(async () => {
+        sceneVersionRef.current += 1
+        const sceneData = {
+          elements: elements.filter((el: any) => !el.isDeleted),
+          appState: {
+            viewBackgroundColor: appState.viewBackgroundColor,
+            gridSize: appState.gridSize,
+          },
+          files: files || {},
+        }
+
+        try {
+          await saveDrawing(drawingId, sceneData, sceneVersionRef.current)
+        } catch (err) {
+          console.error("Failed to save drawing:", err)
+        }
+      }, 2000)
+    },
+    [drawingId],
+  )
+
+  const handlePointerUpdate = useCallback(
+    (payload: {
+      pointer: { x: number; y: number }
+      button: string
+      pointersMap: Map<number, any>
+    }) => {
+      if (portalRef.current && excalidrawAPIRef.current) {
+        const appState = excalidrawAPIRef.current.getAppState()
+        portalRef.current.sendMouseLocation({
+          pointer: payload.pointer,
+          button: payload.button,
+          selectedElementIds: appState?.selectedElementIds || {},
+          username: userName,
+        })
+      }
+    },
+    [userName],
+  )
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  if (!Excalidraw) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-muted-foreground text-sm">Loading editor...</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full w-full">
+      <Excalidraw
+        excalidrawAPI={(api: ExcalidrawImperativeAPI) => {
+          excalidrawAPIRef.current = api
+        }}
+        initialData={{
+          elements: initialData.elements || [],
+          appState: {
+            ...initialData.appState,
+          },
+          scrollToContent: true,
+        }}
+        onChange={handleChange}
+        onPointerUpdate={handlePointerUpdate}
+        isCollaborating={isCollaborating}
+        theme="light"
+      />
+    </div>
+  )
+}

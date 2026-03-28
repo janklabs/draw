@@ -1,7 +1,10 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  output: "standalone",
+  serverExternalPackages: ["pg"],
+  turbopack: {},
+  allowedDevOrigins: ["127.0.0.1", "localhost"],
+}
 
-export default nextConfig;
+export default nextConfig
