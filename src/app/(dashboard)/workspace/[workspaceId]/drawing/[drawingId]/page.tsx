@@ -2,7 +2,7 @@ import { getDrawing } from "@/lib/actions"
 import { auth } from "@/lib/auth"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
-import { DrawingEditor } from "@/components/editor/drawing-editor"
+import { DrawingEditorLoader } from "@/components/editor/drawing-editor-loader"
 
 interface DrawingPageProps {
   params: Promise<{ workspaceId: string; drawingId: string }>
@@ -28,7 +28,7 @@ export default async function DrawingPage({ params }: DrawingPageProps) {
   }
 
   return (
-    <DrawingEditor
+    <DrawingEditorLoader
       drawingId={drawingId}
       workspaceId={workspaceId}
       title={drawing.title}

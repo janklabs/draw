@@ -15,22 +15,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
   app:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3003:3000"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/draw
       BETTER_AUTH_SECRET: change-this-to-a-long-random-string-in-production
       BETTER_AUTH_URL: http://localhost:3000
       NODE_ENV: production
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_MAIL_FROM: ${SMTP_MAIL_FROM}
     depends_on:
       postgres:
         condition: service_healthy
-
 volumes:
   pgdata:

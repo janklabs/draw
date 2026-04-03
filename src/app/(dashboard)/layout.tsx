@@ -20,7 +20,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex h-screen flex-col overflow-hidden">
       <header className="border-b">
         <div className="flex h-14 items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2 font-semibold">
@@ -30,7 +30,7 @@ export default async function DashboardLayout({
           <UserMenu />
         </div>
       </header>
-      <main className="flex-1">{children}</main>
+      <main className="min-h-0 flex-1 overflow-auto">{children}</main>
       <Toaster />
     </div>
   )

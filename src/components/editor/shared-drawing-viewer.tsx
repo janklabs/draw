@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { PenLine, Eye, Pencil } from "lucide-react"
+import "@excalidraw/excalidraw/index.css"
 
 interface SharedDrawingViewerProps {
   title: string
@@ -19,15 +20,19 @@ export function SharedDrawingViewer({
   initialData,
   viewOnly,
 }: SharedDrawingViewerProps) {
-  const [Excalidraw, setExcalidraw] = useState<any>(null)
+  const [ExcalidrawComp, setExcalidrawComp] = useState<any>(null)
 
   useEffect(() => {
-    import("@excalidraw/excalidraw").then((mod) => {
-      setExcalidraw(() => mod.Excalidraw)
-    })
+    import("@excalidraw/excalidraw")
+      .then((mod) => {
+        setExcalidrawComp(() => mod.Excalidraw)
+      })
+      .catch((err) => {
+        console.error("Failed to load Excalidraw:", err)
+      })
   }, [])
 
-  if (!Excalidraw) {
+  if (!ExcalidrawComp) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-muted-foreground text-sm">Loading...</div>
@@ -36,7 +41,7 @@ export function SharedDrawingViewer({
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col overflow-hidden">
       <div className="flex items-center gap-3 border-b px-4 py-2">
         <div className="flex items-center gap-2">
           <PenLine className="h-4 w-4" />
@@ -58,8 +63,8 @@ export function SharedDrawingViewer({
           )}
         </Badge>
       </div>
-      <div className="flex-1">
-        <Excalidraw
+      <div style={{ flex: 1, overflow: "hidden" }}>
+        <ExcalidrawComp
           initialData={{
             elements: initialData.elements || [],
             appState: initialData.appState || {},

@@ -10,7 +10,7 @@ import {
   getKeyFromHash,
   setKeyInHash,
 } from "@/lib/crypto"
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types"
+import "@excalidraw/excalidraw/index.css"
 
 interface ExcalidrawWrapperProps {
   drawingId: string
@@ -29,10 +29,11 @@ export function ExcalidrawWrapper({
   userId,
   userName,
 }: ExcalidrawWrapperProps) {
-  const [Excalidraw, setExcalidraw] = useState<any>(null)
+  const [ExcalidrawComp, setExcalidrawComp] = useState<any>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [isCollaborating, setIsCollaborating] = useState(false)
   const [collaborators, setCollaborators] = useState<RoomUser[]>([])
-  const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null)
+  const excalidrawAPIRef = useRef<any>(null)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const sceneVersionRef = useRef(0)
   const portalRef = useRef<CollabPortal | null>(null)
@@ -40,9 +41,29 @@ export function ExcalidrawWrapper({
 
   // Dynamically import Excalidraw (it only works in browser)
   useEffect(() => {
-    import("@excalidraw/excalidraw").then((mod) => {
-      setExcalidraw(() => mod.Excalidraw)
-    })
+    let mounted = true
+
+    async function loadExcalidraw() {
+      try {
+        const mod = await import("@excalidraw/excalidraw")
+        if (mounted) {
+          setExcalidrawComp(() => mod.Excalidraw)
+        }
+      } catch (err) {
+        console.error("Failed to load Excalidraw:", err)
+        if (mounted) {
+          setLoadError(
+            err instanceof Error ? err.message : "Failed to load editor",
+          )
+        }
+      }
+    }
+
+    loadExcalidraw()
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
   // Initialize collaboration
@@ -50,63 +71,68 @@ export function ExcalidrawWrapper({
     let cancelled = false
 
     async function initCollaboration() {
-      // Get or generate encryption key
-      let keyString = getKeyFromHash()
-      let key: CryptoKey
+      try {
+        // Get or generate encryption key
+        let keyString = getKeyFromHash()
+        let key: CryptoKey
 
-      if (keyString) {
-        key = await importKey(keyString)
-      } else {
-        key = await generateEncryptionKey()
-        keyString = await exportKey(key)
-        setKeyInHash(keyString)
+        if (keyString) {
+          key = await importKey(keyString)
+        } else {
+          key = await generateEncryptionKey()
+          keyString = await exportKey(key)
+          setKeyInHash(keyString)
+        }
+
+        if (cancelled) return
+
+        const portal = new CollabPortal(drawingId, key, {
+          onSceneInit: (elements) => {
+            if (excalidrawAPIRef.current) {
+              excalidrawAPIRef.current.updateScene({
+                elements,
+              })
+            }
+          },
+          onSceneUpdate: (elements) => {
+            if (excalidrawAPIRef.current) {
+              excalidrawAPIRef.current.updateScene({
+                elements,
+              })
+            }
+          },
+          onMouseLocation: (data) => {
+            if (excalidrawAPIRef.current) {
+              const collaboratorsMap = new Map(
+                excalidrawAPIRef.current.getAppState()?.collaborators || [],
+              )
+              collaboratorsMap.set(data.socketId, {
+                username: data.username,
+                pointer: data.pointer,
+                button: data.button,
+                selectedElementIds: data.selectedElementIds,
+              })
+              excalidrawAPIRef.current.updateScene({
+                collaborators: collaboratorsMap,
+              })
+            }
+          },
+          onIdleStatus: (_data) => {
+            // Could update presence indicators
+          },
+          onRoomUserChange: (users) => {
+            setCollaborators(users)
+          },
+        })
+
+        portalRef.current = portal
+        await portal.connect(userId, userName)
+        if (!cancelled) {
+          setIsCollaborating(true)
+        }
+      } catch (err) {
+        console.error("Collaboration init failed:", err)
       }
-
-      if (cancelled) return
-
-      const portal = new CollabPortal(drawingId, key, {
-        onSceneInit: (elements) => {
-          if (excalidrawAPIRef.current) {
-            excalidrawAPIRef.current.updateScene({
-              elements,
-            })
-          }
-        },
-        onSceneUpdate: (elements) => {
-          if (excalidrawAPIRef.current) {
-            // Apply remote updates without polluting undo stack
-            excalidrawAPIRef.current.updateScene({
-              elements,
-            })
-          }
-        },
-        onMouseLocation: (data) => {
-          if (excalidrawAPIRef.current) {
-            const collaboratorsMap = new Map(
-              excalidrawAPIRef.current.getAppState()?.collaborators || [],
-            )
-            collaboratorsMap.set(data.socketId, {
-              username: data.username,
-              pointer: data.pointer,
-              button: data.button,
-              selectedElementIds: data.selectedElementIds,
-            })
-            excalidrawAPIRef.current.updateScene({
-              collaborators: collaboratorsMap,
-            })
-          }
-        },
-        onIdleStatus: (_data) => {
-          // Could update presence indicators
-        },
-        onRoomUserChange: (users) => {
-          setCollaborators(users)
-        },
-      })
-
-      portalRef.current = portal
-      await portal.connect(userId, userName)
-      setIsCollaborating(true)
     }
 
     initCollaboration()
@@ -121,7 +147,6 @@ export function ExcalidrawWrapper({
     (elements: readonly any[], appState: any, files: any) => {
       // Send incremental updates to collaborators
       if (portalRef.current) {
-        // Only send elements that have changed since last broadcast
         const changedElements = elements.filter((el: any) => {
           const lastVersion = lastBroadcastVersionRef.current.get(el.id)
           return lastVersion === undefined || el.version > lastVersion
@@ -189,7 +214,20 @@ export function ExcalidrawWrapper({
     }
   }, [])
 
-  if (!Excalidraw) {
+  if (loadError) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive text-sm font-medium">
+            Failed to load editor
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">{loadError}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!ExcalidrawComp) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-muted-foreground text-sm">Loading editor...</div>
@@ -198,9 +236,9 @@ export function ExcalidrawWrapper({
   }
 
   return (
-    <div className="h-full w-full">
-      <Excalidraw
-        excalidrawAPI={(api: ExcalidrawImperativeAPI) => {
+    <div style={{ width: "100%", height: "100%" }}>
+      <ExcalidrawComp
+        excalidrawAPI={(api: any) => {
           excalidrawAPIRef.current = api
         }}
         initialData={{

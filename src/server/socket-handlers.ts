@@ -6,7 +6,7 @@
  */
 
 import { Server, Socket } from "socket.io"
-import { SOCKET_EVENTS, type RoomUser } from "@/lib/collaboration/types"
+import { SOCKET_EVENTS, type RoomUser } from "../lib/collaboration/types"
 
 // In-memory room state
 const rooms = new Map<string, Map<string, RoomUser>>()
