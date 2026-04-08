@@ -4,4 +4,3 @@ drizzle
 dist
 .git
 pnpm-lock.yaml
-package-lock.json

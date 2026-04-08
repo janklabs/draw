@@ -10,7 +10,11 @@
 
 import { getSocket, disconnectSocket } from "@/lib/socket"
 import { encryptToBuffer, decryptFromBuffer } from "@/lib/crypto"
-import { SOCKET_EVENTS, type CollabMessage, type RoomUser } from "./types"
+import {
+  SOCKET_EVENTS,
+  type CollabMessage,
+  type RoomUser,
+} from "@draw/collaboration"
 import type { Socket } from "socket.io-client"
 
 export interface PortalCallbacks {
@@ -32,11 +36,12 @@ export class CollabPortal {
     roomId: string,
     encryptionKey: CryptoKey,
     callbacks: PortalCallbacks,
+    token: string,
   ) {
     this.roomId = roomId
     this.encryptionKey = encryptionKey
     this.callbacks = callbacks
-    this.socket = getSocket()
+    this.socket = getSocket(token)
   }
 
   async connect(userId: string, userName: string) {

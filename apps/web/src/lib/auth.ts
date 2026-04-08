@@ -1,22 +1,25 @@
 import { betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { magicLink } from "better-auth/plugins"
+import { oneTimeToken } from "better-auth/plugins/one-time-token"
 import { db } from "@/db"
 import * as authSchema from "@/db/schema/auth"
 import nodemailer from "nodemailer"
 import type SMTPTransport from "nodemailer/lib/smtp-transport"
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
+  host: process.env.WEB_SMTP_HOST,
   port: 587,
   secure: false,
   auth: {
-    user: process.env.SMTP_USERNAME,
-    pass: process.env.SMTP_PASSWORD,
+    user: process.env.WEB_SMTP_USERNAME,
+    pass: process.env.WEB_SMTP_PASSWORD,
   },
 } as SMTPTransport.Options)
 
 export const auth = betterAuth({
+  secret: process.env.WEB_AUTH_SECRET,
+  baseURL: process.env.WEB_AUTH_URL,
   database: drizzleAdapter(db, {
     provider: "pg",
     schema: {
@@ -30,7 +33,7 @@ export const auth = betterAuth({
     magicLink({
       sendMagicLink: async ({ email, token, url }) => {
         await transporter.sendMail({
-          from: process.env.SMTP_MAIL_FROM,
+          from: process.env.WEB_SMTP_MAIL_FROM,
           to: email,
           subject: "Sign in to Draw",
           html: `
@@ -48,6 +51,7 @@ export const auth = betterAuth({
         })
       },
     }),
+    oneTimeToken(),
   ],
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days

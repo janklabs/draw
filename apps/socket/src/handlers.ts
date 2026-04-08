@@ -6,7 +6,7 @@
  */
 
 import { Server, Socket } from "socket.io"
-import { SOCKET_EVENTS, type RoomUser } from "../lib/collaboration/types"
+import { SOCKET_EVENTS, type RoomUser } from "@draw/collaboration"
 
 // In-memory room state
 const rooms = new Map<string, Map<string, RoomUser>>()
@@ -25,11 +25,15 @@ export function registerSocketHandlers(io: Server) {
   io.on("connection", (socket: Socket) => {
     let currentRoomId: string | null = null
 
+    // User info attached by auth middleware
+    const userId = (socket.data as any)?.userId || "anonymous"
+    const userName = (socket.data as any)?.userName || "Anonymous"
+
     // ─── Join a drawing room ───
     socket.on(
       SOCKET_EVENTS.JOIN_ROOM,
       (data: { roomId: string; userId: string; name: string }) => {
-        const { roomId, userId, name } = data
+        const { roomId } = data
 
         // Leave previous room if any
         if (currentRoomId) {
@@ -55,8 +59,8 @@ export function registerSocketHandlers(io: Server) {
 
         rooms.get(roomId)!.set(socket.id, {
           socketId: socket.id,
-          userId,
-          name,
+          userId: data.userId || userId,
+          name: data.name || userName,
         })
 
         socket.emit(SOCKET_EVENTS.ROOM_JOINED, {
@@ -86,7 +90,6 @@ export function registerSocketHandlers(io: Server) {
     socket.on(
       SOCKET_EVENTS.SCENE_UPDATE,
       (roomId: string, encryptedBuffer: ArrayBuffer) => {
-        // Broadcast to everyone else in the room
         socket.to(roomId).emit(SOCKET_EVENTS.SERVER_BROADCAST, encryptedBuffer)
       },
     )

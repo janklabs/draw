@@ -1,0 +1,19 @@
+{
+  "name": "@draw/socket",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "infisical run --env=dev -- tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@draw/collaboration": "workspace:*",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "tsx": "^4.21.0",
+    "typescript": "^5"
+  }
+}

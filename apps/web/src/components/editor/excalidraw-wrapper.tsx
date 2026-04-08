@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { saveDrawing } from "@/lib/actions"
+import { generateSocketToken } from "@/lib/actions/socket-token"
 import { CollabPortal, type RoomUser } from "@/lib/collaboration"
 import {
   generateEncryptionKey,
@@ -86,44 +87,52 @@ export function ExcalidrawWrapper({
 
         if (cancelled) return
 
-        const portal = new CollabPortal(drawingId, key, {
-          onSceneInit: (elements) => {
-            if (excalidrawAPIRef.current) {
-              excalidrawAPIRef.current.updateScene({
-                elements,
-              })
-            }
+        // Generate a one-time token for socket authentication
+        const token = await generateSocketToken()
+
+        const portal = new CollabPortal(
+          drawingId,
+          key,
+          {
+            onSceneInit: (elements) => {
+              if (excalidrawAPIRef.current) {
+                excalidrawAPIRef.current.updateScene({
+                  elements,
+                })
+              }
+            },
+            onSceneUpdate: (elements) => {
+              if (excalidrawAPIRef.current) {
+                excalidrawAPIRef.current.updateScene({
+                  elements,
+                })
+              }
+            },
+            onMouseLocation: (data) => {
+              if (excalidrawAPIRef.current) {
+                const collaboratorsMap = new Map(
+                  excalidrawAPIRef.current.getAppState()?.collaborators || [],
+                )
+                collaboratorsMap.set(data.socketId, {
+                  username: data.username,
+                  pointer: data.pointer,
+                  button: data.button,
+                  selectedElementIds: data.selectedElementIds,
+                })
+                excalidrawAPIRef.current.updateScene({
+                  collaborators: collaboratorsMap,
+                })
+              }
+            },
+            onIdleStatus: (_data) => {
+              // Could update presence indicators
+            },
+            onRoomUserChange: (users) => {
+              setCollaborators(users)
+            },
           },
-          onSceneUpdate: (elements) => {
-            if (excalidrawAPIRef.current) {
-              excalidrawAPIRef.current.updateScene({
-                elements,
-              })
-            }
-          },
-          onMouseLocation: (data) => {
-            if (excalidrawAPIRef.current) {
-              const collaboratorsMap = new Map(
-                excalidrawAPIRef.current.getAppState()?.collaborators || [],
-              )
-              collaboratorsMap.set(data.socketId, {
-                username: data.username,
-                pointer: data.pointer,
-                button: data.button,
-                selectedElementIds: data.selectedElementIds,
-              })
-              excalidrawAPIRef.current.updateScene({
-                collaborators: collaboratorsMap,
-              })
-            }
-          },
-          onIdleStatus: (_data) => {
-            // Could update presence indicators
-          },
-          onRoomUserChange: (users) => {
-            setCollaborators(users)
-          },
-        })
+          token,
+        )
 
         portalRef.current = portal
         await portal.connect(userId, userName)

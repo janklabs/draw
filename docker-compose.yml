@@ -15,24 +15,41 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-  app:
+
+  web:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: apps/web/Dockerfile
+      args:
+        BUILD_VERSION: dev
     restart: unless-stopped
     ports:
-      - "3003:3000"
+      - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/draw
-      BETTER_AUTH_SECRET: change-this-to-a-long-random-string-in-production
-      BETTER_AUTH_URL: http://localhost:3000
+      WEB_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/draw
+      WEB_AUTH_SECRET: ${WEB_AUTH_SECRET:-change-this-to-a-random-secret}
+      WEB_AUTH_URL: ${WEB_AUTH_URL:-http://localhost:3000}
+      WEB_SMTP_HOST: ${WEB_SMTP_HOST}
+      WEB_SMTP_USERNAME: ${WEB_SMTP_USERNAME}
+      WEB_SMTP_PASSWORD: ${WEB_SMTP_PASSWORD}
+      WEB_SMTP_MAIL_FROM: ${WEB_SMTP_MAIL_FROM}
+      NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-http://localhost:3001}
       NODE_ENV: production
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_USERNAME: ${SMTP_USERNAME}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_MAIL_FROM: ${SMTP_MAIL_FROM}
     depends_on:
       postgres:
         condition: service_healthy
+
+  socket:
+    build:
+      context: .
+      dockerfile: apps/socket/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      SOCKET_PORT: "3001"
+      SOCKET_CORS_ORIGIN: ${SOCKET_CORS_ORIGIN:-http://localhost:3000}
+      SOCKET_AUTH_URL: ${SOCKET_AUTH_URL:-http://web:3000}
+
 volumes:
   pgdata:
