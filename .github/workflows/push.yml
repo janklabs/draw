@@ -1,5 +1,4 @@
 name: Release & Docker Push
-
 on:
   push:
     branches:
@@ -10,7 +9,6 @@ on:
         description: "Docker image tag to push"
         required: false
         default: "latest"
-
 jobs:
   format-check:
     name: Prettier Format Check
@@ -24,7 +22,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run prettier:check
-
   release:
     name: Semantic Release
     if: github.event_name == 'push'
@@ -51,7 +48,6 @@ jobs:
         uses: cycjimmy/semantic-release-action@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   docker-push-web:
     name: Docker Push (Web)
     needs: release
@@ -76,7 +72,6 @@ jobs:
             ${{ vars.DOCKER_IMAGE_WEB }}:${{ needs.release.outputs.version }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
-
   docker-push-socket:
     name: Docker Push (Socket)
     needs: release
@@ -95,11 +90,10 @@ jobs:
           file: apps/socket/Dockerfile
           push: true
           tags: |
-            ${{ vars.DOCKER_IMAGE_SOCKETIO }}:latest
-            ${{ vars.DOCKER_IMAGE_SOCKETIO }}:${{ needs.release.outputs.version }}
+            ${{ vars.DOCKER_IMAGE_SOCKET }}:latest
+            ${{ vars.DOCKER_IMAGE_SOCKET }}:${{ needs.release.outputs.version }}
           cache-from: type=gha,scope=socket
           cache-to: type=gha,mode=max,scope=socket
-
   docker-force-push:
     name: Docker Force Push
     if: github.event_name == 'workflow_dispatch'
@@ -127,10 +121,9 @@ jobs:
           context: .
           file: apps/socket/Dockerfile
           push: true
-          tags: ${{ vars.DOCKER_IMAGE_SOCKETIO }}:${{ inputs.tag }}
+          tags: ${{ vars.DOCKER_IMAGE_SOCKET }}:${{ inputs.tag }}
           cache-from: type=gha,scope=socket
           cache-to: type=gha,mode=max,scope=socket
-
   deploy-vps:
     name: Deploy to VPS
     needs: [docker-push-web, docker-push-socket, docker-force-push]
